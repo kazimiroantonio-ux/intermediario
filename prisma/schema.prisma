@@ -1,0 +1,2104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  VERIFIED_SELLER
+  PRO
+  ENTERPRISE
+  AGENT
+  ADMIN
+}
+
+enum DealType {
+  VENDA
+  ALUGUER
+}
+
+// Ciclo de vida do anúncio (spec v3 sec. 3): RASCUNHO → VERIFICAÇÃO → VERIFICADO
+// → PUBLICADO. `BLOCKED` = bloqueado por docs/risco; `REJECTED` = recusado pelo
+// operador; `CLOSED` = imóvel vendido/arrendado (negócio concluído).
+enum ListingStatus {
+  DRAFT
+  PENDING_VERIFICATION // aguarda verificação documental do vendedor/anúncio
+  VERIFIED // documento verificado — pronto a publicar
+  ACTIVE // publicado
+  EXPIRED
+  BLOCKED
+  REJECTED
+  CLOSED
+}
+
+enum PlanTier {
+  BASICO
+  PRO
+  EMPRESA
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  CANCELLED
+}
+
+enum TransactionStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+enum ReportStatus {
+  PENDENTE
+  ANALISADO
+  REJEITADO
+}
+
+enum TransactionType {
+  PLANO
+  DESTAQUE
+  VERIFICACAO
+  COMISSAO
+  BANNER
+  FLASH
+}
+
+enum BannerPosition {
+  HERO
+  HOME_MID
+  LISTING_TOP
+}
+
+enum VerificationStatus {
+  PENDENTE
+  APROVADO
+  REJEITADO
+}
+
+enum BannerStatus {
+  ATIVO
+  PAUSADO
+  EXPIRADO
+}
+
+// ----------------------------------------------------
+// AGENTES (Fase 3 — Lei 14/24 / modalidade de agente)
+// ----------------------------------------------------
+
+enum AgentStatus {
+  PENDING_REVIEW
+  APPROVED
+  SUSPENDED
+  REJECTED
+  INACTIVE
+}
+
+enum AgentTier {
+  JUNIOR
+  SENIOR
+  LEAD
+}
+
+enum PayoutMethod {
+  MULTICAIXA
+  BANK_TRANSFER
+}
+
+enum TaxRegime {
+  INDIVIDUAL_GROUP_C
+  COMPANY_GENERAL
+  COMPANY_SIMPLIFIED
+}
+
+enum AssignmentStatus {
+  REQUESTED
+  OFFERED
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  EXPIRED
+  REASSIGNED
+}
+
+enum RequesterType {
+  SELLER
+  BUYER
+  SYSTEM
+  ADMIN
+}
+
+enum CommissionStatus {
+  PENDING
+  ACCRUED
+  PAYABLE
+  PAID
+  REVERSED
+  DISPUTED
+}
+
+enum PayoutStatus {
+  DRAFT
+  APPROVED
+  PROCESSING
+  PAID
+  FAILED
+}
+
+// ----------------------------------------------------
+// CORE (novo modelo de negócio — tabelas novo-core)
+// ----------------------------------------------------
+
+enum ListingType {
+  SALE
+  RENT
+}
+
+enum PaymentStatus {
+  CRIADO
+  AGUARDA_PAGAMENTO
+  INICIADO
+  PENDENTE_NO_BANCO
+  RECEBIDO
+  RECONCILIADO
+  FALHOU
+  CANCELADO
+  REEMBOLSO_PENDENTE
+  REEMBOLSADO
+  PENDING // legado (compat) — não usar em novos registos
+  APPROVED // legado (compat)
+  REJECTED // legado (compat)
+  REFUNDED // legado (compat)
+}
+
+enum PaymentMethod {
+  MULTICAIXA_EXPRESS
+  BANK_TRANSFER
+  PAYPAL
+}
+
+enum PromotionPosition {
+  HOME_HERO // Destaque principal na home
+  CATEGORY_TOP // Topo da categoria
+  SEARCH_BOOST // Maior relevância na busca
+}
+
+// ----------------------------------------------------
+// GEOGRAFIA (Lei 14/24 + Lei 8/25 — divisão 21 províncias / 326 municípios)
+// ----------------------------------------------------
+
+model Province {
+  id          String         @id @default(cuid())
+  code        String         @unique // "LDA"
+  name        String
+  isActive    Boolean        @default(false) // Luanda = true no launch
+  launchOrder Int?           // ordem prevista de expansão
+  createdAt   DateTime       @default(now())
+  municipalities Municipality[]
+  @@map("provinces")
+}
+
+model Municipality {
+  id         String     @id @default(cuid())
+  provinceId String
+  code       String     @unique // "AOLDA050101" (Lei 8/25)
+  name       String
+  isActive   Boolean    @default(true)
+  travelTier Int        @default(1) // 1..3 — usado no preço da deslocação (v2, sec. 6.2)
+  createdAt  DateTime   @default(now())
+  province   Province   @relation(fields: [provinceId], references: [id], onDelete: Cascade)
+  districts  District[]
+  agents     AgentMunicipality[]
+  partners   PartnerMunicipality[]
+  @@unique([provinceId, name])
+  @@index([provinceId])
+  @@map("municipalities")
+}
+
+model District {
+  id             String       @id @default(cuid())
+  municipalityId String
+  name           String
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  municipality   Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+  @@unique([municipalityId, name])
+  @@index([municipalityId])
+  @@map("districts")
+}
+
+// ----------------------------------------------------
+// PLANOS E ASSINATURAS (novo-core)
+// ----------------------------------------------------
+
+model Plan {
+  id           String  @id @default(cuid())
+  name         String // Ex: "Grátis", "Profissional", "Empresa"
+  slug         String  @unique // Ex: "free", "pro", "enterprise"
+  priceInKz    Decimal @db.Decimal(12, 2) // Ex: 15000.00
+  durationDays Int // Ex: 30 dias
+  maxListings  Int // Quantidade máxima de anúncios ativos
+  hasBadge     Boolean @default(false) // Selo de verificação incluído
+  isActive     Boolean @default(true)
+  createdAt    DateTime @default(now())
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id        String   @id @default(cuid())
+  userId    String
+  planId    String
+  startDate DateTime @default(now())
+  endDate   DateTime
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan     Plan      @relation(fields: [planId], references: [id])
+  payments Payment[]
+
+  @@map("subscriptions")
+}
+
+// ----------------------------------------------------
+// PACOTES DE DESTAQUE (novo-core)
+// ----------------------------------------------------
+
+model PromotionPackage {
+  id           String            @id @default(cuid())
+  name         String // Ex: "Destaque Ouro - 7 Dias"
+  position     PromotionPosition
+  durationDays Int // Ex: 7, 15, 30 dias
+  priceInKz    Decimal           @db.Decimal(12, 2)
+  isActive     Boolean           @default(true)
+
+  promotions ListingPromotion[]
+
+  @@map("promotion_packages")
+}
+
+model ListingPromotion {
+  id                 String           @id @default(cuid())
+  listingId          String
+  promotionPackageId String
+  startDate          DateTime         @default(now())
+  endDate            DateTime
+  isActive           Boolean          @default(true)
+  createdAt          DateTime         @default(now())
+
+  listing             Listing          @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  package             PromotionPackage @relation(fields: [promotionPackageId], references: [id])
+  payments            Payment[]
+
+  @@map("listing_promotions")
+}
+
+// ----------------------------------------------------
+// PAGAMENTOS (novo-core)
+// ----------------------------------------------------
+
+model Payment {
+  id                 String        @id @default(cuid())
+  userId             String
+  subscriptionId     String?
+  listingPromotionId String?
+  amount             Decimal       @db.Decimal(12, 2)
+  method             PaymentMethod
+  status             PaymentStatus @default(PENDING)
+  referenceCode      String?       @unique // Referência MCX / Comprovativo
+  proofOfPaymentUrl  String?       // Comprovativo de transferência
+  paidAt             DateTime?
+  createdAt          DateTime      @default(now())
+
+  user             User              @relation(fields: [userId], references: [id])
+  subscription     Subscription?     @relation(fields: [subscriptionId], references: [id])
+  listingPromotion ListingPromotion? @relation(fields: [listingPromotionId], references: [id])
+
+  @@map("payments")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  password      String?
+  phone         String?
+  // Identidade por telemóvel (better-auth phoneNumber plugin): login/registo por SMS.
+  // `phone` é o campo legado (2FA SMS); o plugin usa `phoneNumber` (único).
+  phoneNumber          String?   @unique
+  phoneNumberVerified  Boolean   @default(false)
+  phoneNumberVerifiedAt DateTime?
+  role          Role      @default(USER)
+  province      String?
+  // Função operacional (spec v3 sec. 4) — separada do plano comercial. Null = externo.
+  operatorRoleId String?
+  operatorRole OperatorRole? @relation("OperatorUser", fields: [operatorRoleId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions      Session[]
+  accounts      Account[]
+  listings      Listing[]
+  reservations  Reservation[]
+  reviewsSent   Review[]      @relation("ReviewsSent")
+  reviewsRec    Review[]      @relation("ReviewsReceived")
+  favorites     Favorite[]
+  messages      Message[]
+  chatsAsBuyer  ChatRoom[]    @relation("BuyerChats")
+  chatsAsSeller ChatRoom[]    @relation("SellerChats")
+  reports       Report[]
+  transactions  Transaction[]
+  notifications Notification[]
+  commissions   CommissionLedger[]
+  flashPromotions FlashPromotion[]
+  verificationRequests VerificationRequest[]
+  payments      Payment[]
+  subscriptions Subscription[]
+  agent         Agent?  @relation("AgentUser")
+  agentsApproved        Agent[]           @relation("AgentApprover")
+  assignmentsRequested  AgentAssignment[] @relation("AssignmentRequester")
+  payoutsApproved       AgentPayout[]     @relation("PayoutApprover")
+  dealsAsSeller Deal[] @relation("DealSeller")
+  dealsAsBuyer  Deal[] @relation("DealBuyer")
+  agreementsCreated Agreement[] @relation("AgreementCreator")
+  refundsPrepared    RefundRequest[] @relation("RefundPrepared")
+  refundsApproved    RefundRequest[] @relation("RefundApproved")
+  riskActionsRequested PendingRiskAction[] @relation("RiskActionRequested")
+  riskActionsApproved  PendingRiskAction[] @relation("RiskActionApproved")
+  templatesApproved    DocumentTemplate[] @relation("TemplateApprover")
+  documentsGenerated   DealDocument[] @relation("DocumentGenerated")
+  documentsReviewed    DealDocument[] @relation("DocumentReviewed")
+  documentSignatures   DocumentSignature[] @relation("DocSigner")
+
+  bio           String?
+  whatsapp      String?
+  companyName   String?
+  isVerified    Boolean       @default(false)
+  // 2FA (better-auth): TOTP + backup codes; segredo cifrado pelo plugin
+  twoFactorEnabled Boolean @default(false)
+  totpSecret        String?
+  twoFactorBackupCodes String?
+
+  activities      UserActivity[]
+  otpCodes        OtpCode[]
+  bankAccounts    BankAccount[]
+  kycCases        KycCase[]
+  amlCases        AmlCase[]
+  aiRequests      AiRequest[]
+  supportTickets  SupportTicket[]
+  disputesInitiated Dispute[]
+  tasksOwned      Task[]
+  tasksAssigned   Task[] @relation("TaskAssignee")
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  providerId            String
+  accountId             String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verifications")
+}
+
+model Listing {
+  id             String        @id @default(cuid())
+  title          String
+  description    String
+  price          Decimal       @db.Decimal(12, 2)
+  currency       String        @default("AOA")
+  dealType       DealType
+  status         ListingStatus @default(DRAFT)
+  category       String
+  subcategory    String?
+  province       String
+  municipality   String?
+  images         String[]
+  isFeatured     Boolean       @default(false)
+  featuredUntil  DateTime?
+  attributes     Json
+  views          Int           @default(0)
+  publishedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Angola — verificação documental (sec. 6) e IBAN do vendedor (sec. 8)
+  verificationStatus ListingVerificationStatus @default(NOT_REQUESTED)
+  documents          ListingDocument[]
+  riskActions        PendingRiskAction[]
+  // IBAN bloqueado após verificação; alteração exige dupla aprovação
+  sellerIban         String?
+  sellerIbanVerifiedAt DateTime?
+  sellerIbanLocked   Boolean       @default(false)
+
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  reservations   Reservation[]
+  favorites      Favorite[]
+  chatRooms      ChatRoom[]
+  reports        Report[]
+  transactions   Transaction[]
+  flashPromotions FlashPromotion[]
+  promotions     ListingPromotion[]
+  agentAssignments AgentAssignment[]
+  deals          Deal[]
+  events         ListingEvent[]
+
+  @@index([category, status])
+  @@index([province])
+  @@index([userId])
+  @@map("listings")
+}
+
+model ChatRoom {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  buyerId   String
+  buyer     User     @relation(name: "BuyerChats", fields: [buyerId], references: [id], onDelete: Cascade)
+
+  sellerId  String
+  seller    User     @relation(name: "SellerChats", fields: [sellerId], references: [id], onDelete: Cascade)
+
+  messages  Message[]
+
+  @@unique([listingId, buyerId, sellerId])
+  @@index([sellerId])
+  @@index([buyerId])
+  @@map("chat_rooms")
+}
+
+model Message {
+  id         String    @id @default(cuid())
+  content    String
+  isRead     Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+
+  chatRoomId String
+  chatRoom   ChatRoom  @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+
+  senderId   String
+  sender     User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([chatRoomId])
+  @@map("messages")
+}
+
+model Reservation {
+  id              String            @id @default(cuid())
+  startDate       DateTime          @db.Date
+  endDate         DateTime          @db.Date
+  status          ReservationStatus @default(PENDING)
+  totalPrice      Decimal           @db.Decimal(12, 2)
+  commission      Decimal?          @db.Decimal(12, 2)
+  commissionPaid  Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  listingId  String
+  listing    Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  buyerId    String
+  buyer      User              @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
+  commissions CommissionLedger[]
+  commissionRecord Commission?
+
+  @@index([listingId, startDate, endDate])
+  @@map("reservations")
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+  @@index([listingId])
+  @@map("favorites")
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  reviewerId String
+  reviewer   User     @relation(name: "ReviewsSent", fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  reviewedId String
+  reviewed   User     @relation(name: "ReviewsReceived", fields: [reviewedId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewerId, reviewedId])
+  @@index([reviewedId])
+  @@map("reviews")
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  content   String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  reporterId  String
+  listingId   String
+  reason      String
+  description String?
+  status      ReportStatus @default(PENDENTE)
+  handledBy   String?
+  handledAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  reporter    User     @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  listing     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([reporterId, listingId])
+  @@index([status])
+  @@map("reports")
+}
+
+model Transaction {
+  id          String            @id @default(cuid())
+  amount      Decimal           @db.Decimal(12, 2)
+  currency    String            @default("AOA")
+  status      TransactionStatus @default(PENDING)
+  reference   String            @unique
+  phoneNumber String?
+  type        TransactionType
+  planTier    PlanTier?
+  isDestaque  Boolean           @default(false)
+  description String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  listingId   String?
+  listing     Listing?          @relation(fields: [listingId], references: [id], onDelete: SetNull)
+
+  commissionId String?
+  commission   Commission?      @relation(fields: [commissionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@map("transactions")
+}
+
+model CommissionLedger {
+  id            String   @id @default(cuid())
+  userId        String
+  reservationId String   @unique
+  amount        Decimal  @db.Decimal(12, 2)
+  status        String   @default("PENDENTE")
+  createdAt     DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("commission_ledger")
+}
+
+model VerificationRequest {
+  id           String   @id @default(cuid())
+  userId       String
+  type         String
+  documentUrl  String?
+  status       String   @default("PENDENTE")
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  expiresAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("verification_requests")
+}
+
+model Banner {
+  id           String   @id @default(cuid())
+  title        String
+  imageUrl     String
+  linkUrl      String
+  position     BannerPosition
+  startDate    DateTime
+  endDate      DateTime
+  impressions  Int      @default(0)
+  clicks       Int      @default(0)
+  advertiserId String
+  status       BannerStatus @default(ATIVO)
+  createdAt    DateTime @default(now())
+
+  @@index([position, status])
+  @@map("banners")
+}
+
+model FlashPromotion {
+  id             String   @id @default(cuid())
+  listingId      String
+  advertiserId   String
+  title          String
+  targetProvince String?
+  sentCount      Int      @default(0)
+  openCount      Int      @default(0)
+  status         String   @default("ENVIADA")
+  createdAt      DateTime @default(now())
+
+  advertiser User   @relation(fields: [advertiserId], references: [id], onDelete: Cascade)
+  listing    Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([advertiserId])
+  @@map("flash_promotions")
+}
+
+// ----------------------------------------------------
+// AGENTES — CORE (Fase 3)
+// ----------------------------------------------------
+
+model Agent {
+  id            String      @id @default(cuid())
+  userId        String      @unique
+  code          String      @unique // "AG-LDA-0007", mostrado ao cliente
+  status        AgentStatus @default(PENDING_REVIEW)
+  tier          AgentTier   @default(JUNIOR)
+
+  // KYC
+  fullName       String
+  biNumber       String                // nº BI
+  nif            String?
+  phone          String                // +244
+  photoUrl       String?
+  biDocUrl       String
+  addressProof   String?
+  criminalRecordUrl String?
+
+  // Zona e especialidade
+  municipalities AgentMunicipality[]
+  categories     AgentCategory[]
+
+  // Comissão
+  commissionShareBps Int @default(5000) // 50,00% da comissão do site
+
+  // Pagamento
+  payoutMethod PayoutMethod @default(BANK_TRANSFER)
+  taxRegime    TaxRegime    @default(INDIVIDUAL_GROUP_C)
+  iban         String?
+  bankName     String?
+
+  // Reputação
+  ratingAvg    Float  @default(0)
+  dealsClosed  Int    @default(0)
+  disputesLost Int    @default(0)
+
+  approvedAt      DateTime?
+  approvedById    String?
+  approvedBy      User?   @relation("AgentApprover", fields: [approvedById], references: [id])
+  suspendedReason String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user        User             @relation("AgentUser", fields: [userId], references: [id], onDelete: Cascade)
+  assignments AgentAssignment[]
+  payouts     AgentPayout[]
+  deals       Deal[]           @relation("DealAgent")
+  conversations Conversation[]
+  serviceOrders         ServiceOrder[]
+  callLogs              CallLog[]
+  shifts                AgentShift[]
+  availability          AgentAvailability?
+  compensations         AgentCompensation[]
+  actSessions           ActSession[]
+
+  @@index([status, tier])
+  @@map("agents")
+}
+
+model AgentMunicipality {
+  agentId        String
+  municipalityId String
+  agent          Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  municipality   Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+
+  @@id([agentId, municipalityId])
+  @@index([municipalityId])
+  @@map("agent_municipalities")
+}
+
+model AgentCategory {
+  agentId    String
+  categoryId String // categoria do anúncio (string fixa CATEGORIES)
+  agent      Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@id([agentId, categoryId])
+  @@map("agent_categories")
+}
+
+model AgentAssignment {
+  id            String           @id @default(cuid())
+  agentId       String?
+  listingId     String
+  reservationId String?          @unique // preenchido quando vira negócio
+  requestedById String                     // user que pediu
+  requestedBy   RequesterType    @default(SELLER)
+  status        AssignmentStatus @default(REQUESTED)
+
+  offeredAt       DateTime?
+  respondDeadline DateTime?
+  acceptedAt      DateTime?
+  completedAt     DateTime?
+  cancelReason    String?
+
+  checklist        Json?
+  visitPhotos      String[]
+  visitLat         Float?
+  visitLng         Float?
+  buyerConfirmedAt DateTime?
+  sellerConfirmedAt DateTime?
+
+  agent       Agent?            @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  listing     Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  requestedByUser User          @relation("AssignmentRequester", fields: [requestedById], references: [id])
+  commission  Commission?
+  events      AssignmentEvent[]
+
+  @@index([status, agentId])
+  @@index([listingId])
+  @@map("agent_assignments")
+}
+
+model AssignmentEvent {
+  id           String   @id @default(cuid())
+  assignmentId String
+  type         String // OFFERED, ACCEPTED, PHOTO_UPLOADED, ...
+  actorId      String?
+  payload      Json?
+  createdAt    DateTime @default(now())
+
+  assignment AgentAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@index([assignmentId])
+  @@map("assignment_events")
+}
+
+model Commission {
+  id            String           @id @default(cuid())
+  reservationId String?          @unique // legado (reserva) — v2 ancorado ao Deal
+  assignmentId  String?          @unique // legado (Fase 3 v1)
+  dealId        String?          @unique // v2: um só registo por Deal (idempotência)
+
+  dealAmount      BigInt          // valor do negócio, cêntimos AOA
+  rateBps         Int             @default(1000) // 10,00% comissão do site
+  totalCommission BigInt
+
+  agentShareBps   Int    @default(5000) // 50,00% da comissão
+  agentAmount     BigInt @default(0)
+  platformAmount  BigInt
+
+  // createdAt adicionado (Fase 2, bloco 2): o painel do agente mostra a data
+  // de criação da comissão e lista/ordena por ela.
+  createdAt      DateTime         @default(now())
+  status         CommissionStatus @default(PENDING)
+  accruedAt      DateTime?
+  payableAt      DateTime? // accruedAt + janela de disputa (7 dias)
+  paidAt         DateTime?
+  reversedReason String?
+
+  payout   AgentPayout?  @relation(fields: [payoutId], references: [id])
+  payoutId String?
+
+  reservation  Reservation?     @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  assignment   AgentAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  deal         Deal?            @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  transactions Transaction[]
+
+  @@index([status])
+  @@map("commissions")
+}
+
+model AgentPayout {
+  id             String       @id @default(cuid())
+  agentId        String
+  periodStart    DateTime
+  periodEnd      DateTime
+  grossAmount    BigInt
+  withholdingTax BigInt       @default(0) // retenção na fonte
+  netAmount      BigInt
+  status         PayoutStatus @default(DRAFT)
+  reference      String? // ref. bancária / Multicaixa
+  approvedById   String?
+  paidAt         DateTime?
+  // createdAt/failureReason/idempotencyKey adicionados (Fase 2, bloco 2):
+  // o painel lista pagamentos por data e mostra o motivo de falha; a chave
+  // de idempotência evita solicitações duplicadas (única por agente+chave).
+  createdAt      DateTime     @default(now())
+  failureReason  String? // motivo exibido no painel quando status = FAILED
+  idempotencyKey String?      @unique
+
+  agent       Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  approvedBy  User?        @relation("PayoutApprover", fields: [approvedById], references: [id])
+  commissions Commission[]
+
+  @@index([agentId, status])
+  @@map("agent_payouts")
+}
+
+// ----------------------------------------------------
+// V2 — INTERMEDIAÇÃO TOTAL POR AGENTES (plano v2 de 10/09/2026)
+// Deal é a entidade central; o anúncio é apenas catálogo.
+// Modelos aditivos (sem alterar tabelas existentes).
+// ----------------------------------------------------
+
+// Máquina de estados do Anexo B (Opção 0 — dedução na fonte, revisão 30/70).
+// A diligência corre ANTES do acerto; comissão em duas prestações: DEPOSIT 30%
+// no acerto e BALANCE 70% no ato. Nenhuma transição de dinheiro confirma-se
+// sem o destinatário (90% só o vendedor).
+enum DealStatus {
+  LEAD
+  QUEUED
+  AGENT_ASSIGNED
+  QUALIFYING
+  FEES_PENDING
+  VISIT_SCHEDULED
+  VISIT_DONE
+  RELATORIO_SOLICITADO // relatório de diligência encomendado ao betor verificado
+  DUE_DILIGENCE // inspeção física + verificação documental — antes de qualquer acerto
+  REPORT_DELIVERED // relatório entregue ao comprador
+  NEGOTIATING
+  AGREED // OTP das duas partes → Acordo de Negócio + CommissionCharge (DEPOSIT 30%)
+  DEPOSIT_PENDING // comprador tem N dias (recomendado 3) para pagar os 30%
+  DEPOSIT_PAID
+  ACT_SCHEDULED
+  ACT_IN_PROGRESS
+  SETTLED // vendedor confirma receção dos 90%
+  CLOSED_WON
+  CLOSED_LOST
+  EXPIRED_UNPAID // acordo caducou sem pagar a adesão — anúncio volta ao mercado
+  SELLER_WITHDREW
+  BUYER_WITHDREW
+  DISPUTED
+  // Estados de exceção (spec v3 de 10/09/2026 — OWASP/operação):
+  BLOQUEADO_POR_DOCUMENTOS // documentos expirados/divergentes — bloco, não cancela
+  BLOQUEADO_POR_RISCO // compliance bloqueou por risco (KYC/AML/PEP/anomalias)
+  SUSPENSO // suspensão administrativa temporária
+  FRAUDE_EM_INVESTIGACAO // suspeita de fraude — terminal até conclusão; nunca apaga provas
+  REEMBOLSO_PENDENTE // reembolso aprovado em trâmite (dinheiro do comprador)
+  REEMBOLSO_CONCLUIDO
+}
+
+enum ChannelSide {
+  AGENT_BUYER
+  AGENT_SELLER
+  AGENT_INTERNAL
+}
+
+enum ServiceType {
+  TRAVEL_FEE
+  VEHICLE_INSPECTION
+  PROPERTY_INSPECTION
+}
+
+enum ServiceStatus {
+  PENDING_PAYMENT
+  PAID
+  SCHEDULED
+  DELIVERED
+  REFUNDED
+  CANCELLED
+}
+
+enum EngagementType {
+  EMPLOYEE
+  SERVICE_PROVIDER
+}
+
+model Deal {
+  id        String     @id @default(cuid())
+  reference String     @unique // "NEG-2026-04821"
+  type      DealType // VENDA | ALUGUER
+  listingId String
+  sellerId  String
+  buyerId   String
+  agentId   String?
+  status    DealStatus @default(LEAD)
+
+  listedPrice BigInt // preço do anúncio, cêntimos AOA
+  agreedPrice BigInt? // valor final acordado — base da comissão
+  lostReason  String?
+
+  queuedAt       DateTime?
+  assignedAt     DateTime?
+  firstContactAt DateTime? // SLA de call center
+  visitAt        DateTime?
+  agreedAt       DateTime?
+  signedAt       DateTime?
+  closedAt       DateTime?
+  createdAt      DateTime  @default(now())
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  seller  User    @relation("DealSeller", fields: [sellerId], references: [id])
+  buyer   User    @relation("DealBuyer", fields: [buyerId], references: [id])
+  agent   Agent?  @relation("DealAgent", fields: [agentId], references: [id], onDelete: SetNull)
+
+  conversations Conversation[]
+  serviceOrders ServiceOrder[]
+  commission    Commission?
+  callLogs      CallLog[]
+  events        DealEvent[]
+  agreement      Agreement?
+  commissionCharges CommissionCharge[]
+  actSession     ActSession?
+  sellerTransfers SellerTransfer[]
+  refundRequests  RefundRequest[]
+  documents      DealDocument[]
+
+  @@index([status, agentId])
+  @@index([listingId])
+  @@index([sellerId])
+  @@index([buyerId])
+  @@unique([listingId, buyerId]) // um negócio por par anúncio↔comprador
+  @@map("deals")
+}
+
+model DealEvent {
+  id        String   @id @default(cuid())
+  dealId    String
+  type      String // LEAD, ASSIGNED, CALL, FEES_PAID, VISIT, AGREED, ...
+  actorId   String?
+  actorRole String? // Role no momento da ação (auditoria / separação de funções)
+  ipAddress String?
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@map("deal_events")
+}
+
+model CallLog {
+  id          String      @id @default(cuid())
+  dealId      String
+  agentId     String
+  side        ChannelSide
+  direction   String // OUTBOUND | INBOUND
+  outcome     String // ANSWERED | NO_ANSWER | WRONG_NUMBER | REFUSED
+  durationSec Int?
+  notes       String?
+  createdAt   DateTime    @default(now())
+
+  deal  Deal   @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  agent Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@map("call_logs")
+}
+
+model Conversation {
+  id      String       @id @default(cuid())
+  dealId  String
+  side    ChannelSide
+  agentId String
+  partyId String? // buyer ou seller; null no canal interno (sem FK: identidade nunca exposta)
+
+  messages ConversationMessage[]
+  deal  Deal   @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  agent Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([dealId, side])
+  @@map("conversations")
+}
+
+model ConversationMessage {
+  id             String    @id @default(cuid())
+  conversationId String
+  content        String
+  authorKind     String    @default("USER") // USER | AGENT | SYSTEM
+  senderId       String? // rastreio interno — nunca serializado à contraparte
+  isRead         Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("conversation_messages")
+}
+
+model ServicePrice {
+  id          String      @id @default(cuid())
+  type        ServiceType
+  travelTier  Int? // 1..3 conforme município
+  categoryId  String? // categoria do anúncio (ex.: "imoveis", "automoveis")
+  amount      BigInt // cêntimos AOA
+  agentPayout BigInt    @default(0) // subsídio de deslocação do agente
+  partnerCost BigInt    @default(0) // custo da oficina/engenheiro
+  isActive    Boolean   @default(true)
+
+  @@map("service_prices")
+}
+
+model ServiceOrder {
+  id           String        @id @default(cuid())
+  dealId       String
+  type         ServiceType
+  status       ServiceStatus @default(PENDING_PAYMENT)
+  amount       BigInt
+  paymentId    String? // referência Multicaixa
+  agentId      String?
+  partnerId    String?
+  scheduledAt  DateTime?
+  deliveredAt  DateTime?
+  refundReason String?
+
+  deal    Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  agent   Agent?   @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  partner Partner? @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  report  InspectionReport? @relation("OrderReport")
+
+  @@index([dealId, status])
+  @@map("service_orders")
+}
+
+model Partner {
+  id           String      @id @default(cuid())
+  name         String
+  type         ServiceType
+  contactPhone String
+  nif          String?
+  costPerUnit  BigInt // custo por unidade para o site
+  isActive     Boolean     @default(true)
+
+  municipalities PartnerMunicipality[]
+  serviceOrders  ServiceOrder[]
+  reports        InspectionReport[]
+
+  @@map("partners")
+}
+
+model PartnerMunicipality {
+  partnerId      String
+  municipalityId String
+
+  partner      Partner      @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  municipality Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+
+  @@id([partnerId, municipalityId])
+  @@index([municipalityId])
+  @@map("partner_municipalities")
+}
+
+model InspectionReport {
+  id             String   @id @default(cuid())
+  serviceOrderId String   @unique
+  partnerId      String
+  checklist      Json // itens padronizados por categoria
+  score          Int?
+  redFlags       String[]
+  photos         String[]
+  documentUrls   String[] // PDF assinado
+  issuedAt       DateTime @default(now())
+
+  serviceOrder ServiceOrder   @relation("OrderReport", fields: [serviceOrderId], references: [id], onDelete: Cascade)
+  partner      Partner      @relation(fields: [partnerId], references: [id])
+
+  @@map("inspection_reports")
+}
+
+model AgentShift {
+  id        String   @id @default(cuid())
+  agentId   String
+  weekday   Int // 0-6 (domingo = 0)
+  startTime String   // "08:00"
+  endTime   String   // "17:00"
+  isActive  Boolean  @default(true)
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, weekday])
+  @@map("agent_shifts")
+}
+
+model AgentAvailability {
+  agentId        String   @id
+  isOnline       Boolean  @default(false)
+  activeDeals    Int      @default(0)
+  maxActiveDeals Int      @default(8)
+  lastAssignedAt DateTime?
+  updatedAt      DateTime @updatedAt
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@map("agent_availabilities")
+}
+
+model AgentCompensation {
+  id                   String          @id @default(cuid())
+  agentId              String
+  engagement           EngagementType  @default(SERVICE_PROVIDER)
+  baseSalary           BigInt          @default(0) // base fixa mensal, cêntimos
+  travelStipend        BigInt          @default(0) // subsídio de deslocação mensal
+  mealStipend          BigInt          @default(0) // subsídio de alimentação mensal
+  commissionShareBps   Int             @default(5000)
+  isDrawAgainstCommission Boolean       @default(false) // adiantamento recuperável
+  effectiveFrom        DateTime
+  effectiveTo          DateTime?
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, effectiveFrom])
+  @@map("agent_compensations")
+}
+
+// ----------------------------------------------------
+// COMPLIANCE ANGOLA — Lei 22/11 (dados), AML 5/20+8/26, INH
+// Estados de documentos, selo "verificado", exceção AML de pagador terceiro,
+// bloqueio de IBAN com dupla aprovação. (Aditivo, sem alterar tabelas antigas.)
+// ----------------------------------------------------
+
+enum DocumentStatus {
+  RECEIVED // recebido, ainda sem análise
+  PENDING // em análise
+  CONFIRMED // autenticado/confirmado
+  REJECTED // recusado
+  EXPIRED // expirado
+  INCOMPATIBLE // não corresponde ao imóvel/entidade
+}
+
+enum ListingVerificationStatus {
+  NOT_REQUESTED
+  PENDING_DOCS
+  VERIFIED // selo "verificado" — critérios cumpridos (não implica garantia de propriedade)
+  REJECTED
+}
+
+enum AmlReviewStatus {
+  REQUIRED // pagador terceiro — precisa de aprovação de compliance antes de aceitar o dinheiro
+  APPROVED
+  REJECTED
+}
+
+enum RiskActionType {
+  IBAN_CHANGE // alteração após verificação — exige dupla aprovação
+  IBAN_UNLOCK // desbloqueio manual — proibido single-user
+  MANUAL_PAYOUT
+}
+
+enum RiskActionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Check-list documental por anúncio (sec. 6). O selo "verificado" só é dado
+// quando a categoria enquadra os documentos e todos estão CONFIRMED/válidos.
+model ListingDocument {
+  id           String         @id @default(cuid())
+  listingId    String
+  docType      String // "title_deed" | "bi" | "procura" | "licenca_utilizacao" | ...
+  status       DocumentStatus @default(PENDING)
+  fileUrl      String?
+  expiresAt    DateTime?
+  reviewedById String? // sem FK — convenção de VerificationRequest/Report
+  reviewedAt   DateTime?
+  note         String?
+  createdAt    DateTime       @default(now())
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([status])
+  @@map("listing_documents")
+}
+
+// Ações de risco com dupla aprovação (sec. 8): approvedById != requestedById.
+// Nada de desbloqueio manual sem a segunda assinatura.
+model PendingRiskAction {
+  id            String           @id @default(cuid())
+  listingId     String?
+  type          RiskActionType
+  status        RiskActionStatus @default(PENDING)
+  payload       Json? // { oldIban, newIban, reason, requestedByRole, ... }
+  requestedById String
+  approvedById  String? // four-eyes
+  note          String?
+  requestedAt   DateTime         @default(now())
+  approvedAt    DateTime?
+
+  requestedBy User    @relation("RiskActionRequested", fields: [requestedById], references: [id])
+  approvedBy  User?   @relation("RiskActionApproved", fields: [approvedById], references: [id])
+  listing     Listing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+
+  @@index([status, type])
+  @@map("pending_risk_actions")
+}
+
+// ----------------------------------------------------
+// ANEXO B — DEDUÇÃO NA FONTE (comissão paga pelo comprador, com IVA)
+// Mapeamento por negócio (1:1:1): Agreement (termos) · CommissionCharge (cobrança)
+// · Commission (ledger líquido + fatia do agente). Os 90% do vendedor (SellerTransfer)
+// são registo informativo — NUNCA passam pelo ledger do site.
+// ----------------------------------------------------
+
+enum AgreementStatus {
+  DRAFT
+  ACTIVE // OTP das duas partes completos
+  SUPERSEDED // renogociado → novo Agreement, o anterior nunca muda
+  VOID
+}
+
+enum ChargeStatus {
+  PENDING
+  PAID
+  EXPIRED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum ChargeKind {
+  DEPOSIT // 30% da comissão, no acerto
+  BALANCE // 70% da comissão, no ato (antes de abrir a sessão)
+}
+
+enum ActStep {
+  OPENED
+  IDENTITY_CHECKED
+  DOCS_CHECKED
+  PAYMENT_SENT
+  PAYMENT_CONFIRMED
+  HANDOVER_DONE
+  CLOSED
+}
+
+enum RefundStatus {
+  REQUESTED // pedido recebido (lib: SOLICITADO)
+  EM_APROVACAO // 1.ª aprovação dada, falta a 2.ª (reembolsos altos)
+  APPROVED // aprovações completas (lib: APROVADO)
+  EM_PROCESSAMENTO // financeiro a mobilizar (método escolhido)
+  PAID // liquidado com referência de reconciliação (lib: REEMBOLSADO)
+  REJECTED
+  CANCELADO
+}
+
+model Agreement {
+  id                 String          @id @default(cuid())
+  dealId             String          @unique
+  status             AgreementStatus @default(DRAFT) // ACTIVE quando OTPs completos
+  agreedPrice        BigInt // cêntimos AOA, congelado
+  commissionRateBps  Int // 1000, ou reduzido por plano (v2 decisão 3)
+  commissionNet      BigInt // agreedPrice * rate / 10000 — base da comissão
+  vatBps             Int    @default(1400) // Código do IVA, taxa geral 14%
+  commissionVat      BigInt // commissionNet * vatBps / 10000
+  buyerPayable       BigInt // commissionNet + commissionVat — pago ao site
+  sellerPayable      BigInt // agreedPrice − commissionNet — pago ao vendedor no ato
+
+  sellerIban          String
+  sellerIbanVerifiedAt DateTime? // verificação prévia de titular/NIF (antes do acerto)
+
+  // AML (Lei 5/20 + Lei 8/26): o comprador paga dívida do vendedor = pagador
+  // terceiro. É exceção CONTROLADA: justificação + identificação das partes +
+  // aprovação de compliance antes de aceitar os 30% (DEPOSIT).
+  amlReviewStatus AmlReviewStatus @default(REQUIRED)
+  amlMemo         String?
+  amlReviewedById String?
+  amlReviewedAt   DateTime?
+
+  buyerOtpAt  DateTime?
+  sellerOtpAt DateTime?
+  documentUrl String? // PDF do Acordo de Negócio
+  actDeadline DateTime // prazo para o ato
+  createdById String // agente que registou o acerto
+  supersededById String? @unique
+  createdAt   DateTime @default(now())
+
+  deal         Deal       @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  createdBy    User       @relation("AgreementCreator", fields: [createdById], references: [id])
+  charges      CommissionCharge[]
+  supersededBy Agreement? @relation("AgreementSupersede", fields: [supersededById], references: [id])
+  supersedes   Agreement? @relation("AgreementSupersede")
+
+  @@map("agreements")
+}
+
+model CommissionCharge {
+  id          String        @id @default(cuid())
+  dealId      String
+  agreementId String
+  kind        ChargeKind
+  amount      BigInt // 30% (DEPOSIT) ou 70% (BALANCE) do buyerPayable
+  status      ChargeStatus  @default(PENDING)
+  provider    String // PROXYPAY | PAYPAY | BANK_TRANSFER
+  reference   String? // referência 9 dígitos ou link
+  expiresAt   DateTime
+  paidAt      DateTime?
+  bankTxnRef  String?       @unique // idempotência: webhook duplicado ≠ dupla transição
+  invoiceId   String?
+
+  deal     Deal       @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  agreement Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  refunds  RefundRequest[]
+
+  @@unique([agreementId, kind]) // uma adesão (30%) e um saldo (70%) por acordo
+  @@index([status, expiresAt])
+  @@map("commission_charges")
+}
+
+model ActSession {
+  id          String    @id @default(cuid())
+  dealId      String    @unique
+  agentId     String
+  scheduledAt DateTime
+  location    String
+  lat         Float?
+  lng         Float?
+  step        ActStep   @default(OPENED)
+
+  buyerIdVerified  Boolean  @default(false)
+  sellerIdVerified Boolean  @default(false)
+  docsChecklist    Json?
+  transferProofUrls String[] // comprovativos dos 90%
+  sellerReceiptConfirmedAt DateTime? // SÓ o vendedor pode marcar (OTP)
+  sellerReceiptOtp String?
+  handoverSignedUrl String? // auto de entrega assinado
+  buyerHandoverOtpAt  DateTime?
+  sellerHandoverOtpAt DateTime?
+  closedAt    DateTime?
+
+  deal  Deal   @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  agent Agent  @relation(fields: [agentId], references: [id])
+
+  @@map("act_sessions")
+}
+
+model SellerTransfer { // registo informativo dos 90% — não é custódia
+  id          String   @id @default(cuid())
+  dealId      String
+  amount      BigInt
+  method      String // STC | MULTICAIXA | PAYPAY | CHEQUE
+  proofUrl    String?
+  declaredAt  DateTime @default(now())
+  confirmedAt DateTime? // confirmado pelo vendedor na sua conta
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@map("seller_transfers")
+}
+
+model RefundRequest {
+  id           String        @id @default(cuid())
+  dealId       String
+  chargeId     String
+  reason       String // DUE_DILIGENCE_FAIL | SELLER_WITHDREW | BUYER_WITHDREW | ...
+  amount       BigInt // pode ser parcial
+  status       RefundStatus  @default(REQUESTED)
+  preparedById String? // quem preparou
+  approvedById String? // four-eyes: NUNCA == preparedById
+  paidAt       DateTime?
+  proofUrl     String?
+
+  deal       Deal             @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  charge     CommissionCharge @relation(fields: [chargeId], references: [id])
+  preparedBy User?            @relation("RefundPrepared", fields: [preparedById], references: [id])
+  approvedBy User?            @relation("RefundApproved", fields: [approvedById], references: [id])
+
+  @@index([status])
+  @@map("refund_requests")
+}
+
+// ----------------------------------------------------
+// MOTOR DOCUMENTAL (plataforma de gestão documental)
+// A IA prepara e verifica (Fase 4); as pessoas autorizadas aprovam; o sistema
+// bloqueia o avanço quando faltam provas. O motor atual é DETERMINÍSTICO
+// (modelos aprovados + placeholders autorizados); RAG/LLM entra depois por cima
+// desta base de dados (biblioteca = templates + regras).
+// ----------------------------------------------------
+
+enum DocumentType {
+  MEDIATION_CONTRACT // contrato de mediação vendedor ↔ plataforma
+  COMMISSION_PAYMENT_AUTHORIZATION // autorização do vendedor p/ terceiro pagar a comissão
+  SELLER_REPRESENTATION_AUTHORIZATION // autorização para representação
+  DATA_CONSENT // autorização de tratamento de dados pessoais
+  VISIT_AGREEMENT // acordo de visita
+  INSPECTION_AUTHORIZATION // pedido/autorização para inspeção documental
+  PURCHASE_PROPOSAL // proposta de compra
+  PROMISE_CONTRACT // contrato-promessa de compra e venda
+  SALE_CONTRACT // contrato de compra e venda (formalização externa na maioria dos casos)
+  RECEIPT_90_DECLARATION // declaração de recebimento dos 90%
+  HANDOVER_DOCUMENT // termo de entrega do imóvel
+  KEYS_HANDOVER // termo de entrega de chaves
+  CANCELLATION_DECLARATION // declaração de cancelamento
+  REFUND_AGREEMENT // acordo de reembolso
+  TITLE_LEGITIMACY_DECLARATION // declaração de titularidade e legitimidade para vender
+  LIENS_DECLARATION // declaração sobre ónus, dívidas e litígios
+  BENEFICIAL_OWNER_FORM // identificação do beneficiário efetivo
+  FUNDS_ORIGIN_DECLARATION // declaração de origem dos fundos
+  INSPECTION_REPORT_DOC // relatório de inspeção (documento formal)
+}
+
+enum TemplateStatus {
+  DRAFT
+  APPROVED // aprovado por advogado angolano (jurisdição AO)
+  ARCHIVED
+}
+
+enum SignatureRequirement {
+  DIGITAL_SUFFICIENT // assinatura eletrónica simples (OTP) é suficiente
+  QUALIFIED_REQUIRED // assinatura eletrónica qualificada necessária
+  EXTERNAL_FORMALIZATION // exige escritura/notário/conservatória — o site não formaliza
+}
+
+enum DealDocumentStatus {
+  DRAFT
+  PENDING_REVIEW // revisão humana obrigatória pendente
+  APPROVED
+  SENT // link com expiração enviado
+  READ
+  SIGNED
+  REJECTED
+  EXPIRED
+  VOID
+  SUPERSEDED
+}
+
+enum SignatureMethod {
+  OTP_SMS
+  ELECTRONIC
+  QUALIFIED
+}
+
+// Biblioteca de modelos aprovados (Base documental). Só a versão actual é usada;
+// revisões guardam o histórico imutável.
+model DocumentTemplate {
+  id                    String              @id @default(cuid())
+  code                  String              @unique // "MEDIACAO", "AUTORIZACAO_PAG_TERCEIRO"
+  docType               DocumentType
+  name                  String
+  jurisdiction          String              @default("AO")
+  status                TemplateStatus      @default(DRAFT)
+  signatureRequirement  SignatureRequirement @default(DIGITAL_SUFFICIENT)
+  requiresHumanReview   Boolean             @default(false) // alto risco: revisão humana obrigatória
+  riskLevel             Int                 @default(1) // 1..3
+  currentRevision       Int                 @default(1)
+  approvedById          String
+  approvedAt            DateTime?
+  effectiveFrom         DateTime            @default(now())
+  effectiveTo           DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  approvedBy User             @relation("TemplateApprover", fields: [approvedById], references: [id])
+  revisions  TemplateRevision[]
+  documents  DealDocument[]
+
+  @@index([status, docType])
+  @@map("document_templates")
+}
+
+// Cada alteração ao modelo = nova revisão imutável (hash). A IA NUNCA altera
+// cláusulas fixas — só o campo `varsSchema` define o que pode ser preenchido.
+model TemplateRevision {
+  id          String   @id @default(cuid())
+  templateId  String
+  version     Int
+  content     String // modelo com placeholders {{campo}}
+  varsSchema  Json // [{ name, label, required }] — campos autorizados
+  clausulas   Json // cláusulas fixas estruturadas (para auditoria/RAG)
+  fileHash    String // sha256 do content
+  changeNote  String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  template DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, version])
+  @@index([templateId])
+  @@map("template_revisions")
+}
+
+// Documento de um negócio (instância). `variables` é o SNAPSHOT dos dados
+// usados — reutilizados de uma única fonte, sem re-digitar nomes/valores.
+model DealDocument {
+  id                    String              @id @default(cuid())
+  dealId                String
+  templateId            String
+  revision              Int
+  docType               DocumentType
+  status                DealDocumentStatus  @default(DRAFT)
+  title                 String
+
+  variables       Json // snapshot { var: value }
+  alerts          String[] // inconsistências/bloqueios detetados
+  bodyHash        String? // sha256 do corpo final — null até render OK; imutável após SIGNED
+  fileUrl         String? // PDF assinado/gerado
+  requiresHumanReview Boolean @default(false)
+  signatureRequirement SignatureRequirement @default(DIGITAL_SUFFICIENT)
+
+  generatedById String?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  sentToKind    String? // SELLER | BUYER | AGENT
+  consentUrl    String? // link seguro com expiração
+  consentExpiresAt DateTime?
+  signedAt      DateTime?
+  voidReason    String?
+  supersededById String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deal     Deal              @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  template DocumentTemplate  @relation(fields: [templateId], references: [id])
+  generatedBy User?          @relation("DocumentGenerated", fields: [generatedById], references: [id])
+  reviewedBy  User?          @relation("DocumentReviewed", fields: [reviewedById], references: [id])
+  supersededBy DealDocument? @relation("DocumentSupersede", fields: [supersededById], references: [id])
+  supersedes  DealDocument?  @relation("DocumentSupersede")
+  signatureRecords DocumentSignature[]
+  events        DocumentEvent[]
+
+  @@index([dealId, status])
+  @@index([docType, status])
+  @@map("deal_documents")
+}
+
+// Registos de assinatura (sec. 5): OTP, consentimento, IP, dispositivo,
+// hash do documento assinado, certificado.
+model DocumentSignature {
+  id           String           @id @default(cuid())
+  documentId   String
+  signerId     String?
+  signerRole   String // SELLER | BUYER | AGENT | COMPLIANCE
+  method       SignatureMethod  @default(OTP_SMS)
+  consentAt    DateTime? // consentimento para assinatura eletrónica
+  otpVerifiedAt DateTime?
+  otpExpiresAt DateTime?
+  ipAddress    String?
+  userAgent    String?
+  deviceData   String?
+  signedAt     DateTime?
+  certificateReference String?
+  documentHash String // hash do documento assinado
+  createdAt   DateTime @default(now())
+
+  document DealDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  signer    User?       @relation("DocSigner", fields: [signerId], references: [id])
+
+  @@index([documentId])
+  @@map("document_signatures")
+}
+
+// Trilho de auditoria do documento: quem abriu, leu, consentiu, assinou, recusou.
+model DocumentEvent {
+  id         String   @id @default(cuid())
+  documentId String
+  type       String // GENERATED | REVIEWED | SENT | OPENED | CONSENTED | SIGNED | REJECTED | VOIDED | SUPERSEDED | EXPIRED
+  actorId    String?
+  actorRole  String?
+  ipAddress  String?
+  payload    Json?
+  createdAt  DateTime @default(now())
+
+  document DealDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@map("document_events")
+}
+
+// ===========================================================================
+// SPEC v3 DE 10/09/2026 — empresa digital completa (OWASP ASVS 5.0 / Top 10
+// 2025 / API Security Top 10). Modelos ADITIVOS.
+// ===========================================================================
+
+// Trilho do ciclo de vida do anúncio (spec v3 sec. 3): RASCUNHO→VERIFICAÇÃO→
+// VERIFICADO→PUBLICADO + bloqueios. Espelho do `DealEvent` para listings.
+model ListingEvent {
+  id       String   @id @default(cuid())
+  listingId String
+  type     String // CREATED | SUBMITTED | REVIEW_STARTED | APPROVED | REJECTED | PUBLISHED | BLOCKED | EXPIRED | CLOSED | RISK_BLOCKED
+  actorId  String?  // operador (verificador) ou sistema
+  actorRole String? // OPERATOR_VERIFIER | SYSTEM | SELLER
+  ipAddress String?
+  payload  Json?
+  createdAt DateTime @default(now())
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, createdAt])
+  @@map("listing_events")
+}
+
+// ---------- Perfis operacionais e permissões (spec v3 sec. 4) -------------
+// Funções da equipa interna, SEPARADAS do plano comercial (User.role):
+// VERIFICADOR, FINANCEIRO, COMPLIANCE, SUPERVISOR, ADMIN_TECNICO,
+// ADMIN_PRINCIPAL, AGENTE. `User.operatorRoleId` liga o utilizador à função.
+model OperatorRole {
+  id          String   @id @default(cuid())
+  code        String   @unique // VERIFICADOR | FINANCEIRO | COMPLIANCE | SUPERVISOR | ADMIN_TECNICO | ADMIN_PRINCIPAL
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+
+  users        User[]                   @relation("OperatorUser")
+  permissions  OperatorRolePermission[]
+
+  @@map("operator_roles")
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  code        String   @unique // ex.: docs.approve | payments.reconcile | refunds.approve | deals.override.iban
+  name        String
+  resource    String // docs | payments | refunds | deals | listings | users | audit | ai
+  action      String // view | create | approve | reconcile | sign | override | configure
+  description String?
+
+  roles      OperatorRolePermission[]
+  createdAt  DateTime                  @default(now())
+
+  @@map("permissions")
+}
+
+model OperatorRolePermission {
+  operatorRoleId String
+  permissionId   String
+  grantedAt      DateTime @default(now())
+
+  operatorRole OperatorRole @relation(fields: [operatorRoleId], references: [id], onDelete: Cascade)
+  permission   Permission   @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([operatorRoleId, permissionId])
+  @@map("operator_role_permissions")
+}
+
+// ---------- Auditoria de ações de IA (spec v3 sec. 6) -----------------------
+// Append-only: toda a ação de IA regista modelo, versão, entradas (hash),
+// fontes, resultado, confiança, aprovador e alterações aplicadas depois.
+model AiAction {
+  id            String   @id @default(cuid())
+  operation     String // extract | compare | scan | suggest | classify | explain
+  model         String
+  modelVersion  String
+  inputHash     String // sha256 das entradas (documento/dados) — nunca o conteúdo bruto
+  sourceDocumentId String? // doc consultado (ListingDocument/DealDocument)
+  dealId        String?
+  listingId     String?
+  outcome       Json? // resultado devolvido (vars extraídas, sugestões, score)
+  confidence    Float?
+  promptHash    String? // hash da instrução efetiva (rastreio p/ precisão da instrução)
+  status        String // SUGGESTED | APPROVED | REJECTED | FAILED | BLOCKED
+  suggestedById String? // user que gerou (se interativa) ou "system.ia"
+  approvedById  String? // humano que aprovou — null até aprovação
+  approvedAt    DateTime?
+  appliedChanges Json? // diffs aplicados DEPOIS da sugestão
+  createdAt     DateTime @default(now())
+
+  @@index([dealId])
+  @@index([listingId])
+  @@index([status, createdAt])
+  @@map("ai_actions")
+}
+
+// ---------- Ledger de integrações (spec v3 sec. 11) -------------------------
+// Regista cada chamada externa (webhook do banco, OTP, email, storage) com
+// idempotência e estado. Um fornecedor indisponível marca o item PENDENTE —
+// nunca CONCLUÍDO por engano. Complementa `Payment.bankTxnRef @unique`.
+model IntegrationEvent {
+  id            String    @id @default(cuid())
+  provider      String // proxypay | paypay | multicaixa | brevobank | brevo | sms | storage | ia
+  type          String // payment.webhook | payment.status | payout | refund | otp.send | email.send | upload | ai.request
+  direction     String // INBOUND | OUTBOUND
+  eventId       String?   // idempotência do fornecedor (ex.: bank txn id)
+  refId         String?   // Payment/Refund/etc. interno afetado
+  status        String // PENDING | SUCCESS | FAILED | RETRYING | SKIPPED (dup)
+  requestHash   String?
+  requestJson   Json?
+  responseJson  Json?
+  errorMessage  String?
+  rawPayload    Json? // payload original do webhook (dead-letter p/ auditoria)
+  processedAt   DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([provider, eventId])
+  @@index([refId, status])
+  @@map("integration_events")
+}
+
+// ---------- Auditoria geral (spec v3 sec. 5 — logs protegidos) ---------------
+// Append-only: cada evento leva `hash` próprio e `prevHash` (cadeia sha256,
+// ver `lib/audit.ts`). Alterar um registo antigo quebra a cadeia. Exportação
+// só para quem tem `audit.export`; os dados sensíveis (BI/IBAN) nunca em claro.
+model AuditEvent {
+  id           String   @id @default(cuid())
+  occurrenceId String   @unique // idempotência anti-duplicação
+  actorType    String // USER | OPERATOR | SYSTEM | AGENT | AI
+  actorId      String
+  action       String // login | login.failed | deal.transform | refund.approved | ...
+  domain       String // deal | listing | document | payment | refund | user | config | ai
+  entityId     String // id interno da entidade (nunca chaves manuais)
+  reason       String?
+  ip           String?
+  device       String?
+  metadata     Json? // antes/depois, aprovações; campos sensíveis cifrados
+  prevHash     String // hash do evento anterior (início: 64 zeros)
+  hash         String // sha256 deste evento
+  createdAt    DateTime @default(now())
+
+  @@index([domain, entityId])
+  @@index([action, createdAt])
+  @@map("audit_events")
+}
+
+// ---------------------------------------------------------------------------
+// FASE 1 — conta única + atividades + autenticação reforçada (spec v3)
+// ---------------------------------------------------------------------------
+
+enum ActivityType {
+  BUYING
+  SELLING
+  VISITING
+  INVESTIGATING
+}
+
+enum ActivitySide {
+  BUYER
+  SELLER
+}
+
+enum ActivityStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
+}
+
+enum OtpPurpose {
+  EMAIL_VERIFICATION
+  PHONE_VERIFICATION
+  MFA_PHONE
+  CHANGE_IBAN
+  RESET_PASSWORD
+  SELLER_CONFIRM_RECEIPT
+}
+
+enum BankAccountStatus {
+  PENDENTE
+  EM_VERIFICACAO
+  VERIFICADO
+  REJEITADO
+  SUSPENSO
+  SUBSTITUIDO
+}
+
+enum KycStatus {
+  PENDING
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum AmlCaseStatus {
+  OPEN
+  UNDER_REVIEW
+  CLEARED
+  BLOCKED
+  ESCALATED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AiRequestStatus {
+  SUGGESTED
+  APPROVED
+  REJECTED
+  FAILED
+  BLOCKED
+}
+
+enum SupportStatus {
+  NEW
+  ASSIGNED
+  IN_PROGRESS
+  AWAITING_USER
+  WAITING_COMPLIANCE
+  RESOLVED
+  CLOSED
+}
+
+enum SupportPriority {
+  BAIXA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  EVIDENCE_REQUESTED
+  RESOLVED_IN_FAVOR_OF_BUYER
+  RESOLVED_IN_FAVOR_OF_SELLER
+  REJECTED
+  CLOSED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  WAITING
+  BLOCKED
+  DONE
+  CANCELLED
+}
+
+// Atividade de um utilizador como comprador, vendedor, visitante ou
+// investigador — a conta é única; o contexto é dado pela atividade (spec §3).
+model UserActivity {
+  id          String         @id @default(cuid())
+  userId      String
+  activityType ActivityType
+  side        ActivitySide // BUYER | SELLER — alimenta o seletor do painel
+  status      ActivityStatus @default(OPEN)
+  transactionId String?
+  listingId   String?
+  metadata    Json?
+  createdAt   DateTime       @default(now())
+
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, side])
+  @@index([userId, activityType, createdAt])
+  @@map("user_activities")
+}
+
+// OTP persistente e criptografado (hash), com TTL, tentativas e consumo único.
+model OtpCode {
+  id        String     @id @default(cuid())
+  userId    String
+  purpose   OtpPurpose
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int        @default(0)
+  consumedAt DateTime?
+  ip        String?
+  createdAt DateTime   @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@index([expiresAt])
+  @@map("otp_codes")
+}
+
+model BankAccount {
+  id             String           @id @default(cuid())
+  userId         String
+  bank           String
+  ibanCipher     String // IBAN cifrado em repouso (nunca em claro)
+  holderName     String
+  holderNif      String
+  status         BankAccountStatus @default(PENDENTE)
+  verifiedById   String?
+  verifiedAt     DateTime?
+  changedAt      DateTime         @default(now())
+  documents      Json? // referências (sempre via storage privado)
+  createdAt      DateTime         @default(now())
+
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("bank_accounts")
+}
+
+model KycCase {
+  id           String    @id @default(cuid())
+  userId       String
+  status       KycStatus @default(PENDING)
+  items        Json? // checklist item → PENDENTE/EM_ANALISE/APROVADO/REJEITADO
+  riskFactors  Json?
+  submittedAt  DateTime?
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("kyc_cases")
+}
+
+model AmlCase {
+  id            String       @id @default(cuid())
+  userId        String
+  transactionId String?
+  riskLevel     RiskLevel    @default(LOW)
+  status        AmlCaseStatus @default(OPEN)
+  flags         Json? // motivo: terceiros, multissócios, origem fundos, PEP...
+  decisionById  String?
+  decisionAt    DateTime?
+  createdAt     DateTime     @default(now())
+
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("aml_cases")
+}
+
+// Pedido de IA documental — espelho determinístico (guarda-redes, spec §15).
+model AiRequest {
+  id            String          @id @default(cuid())
+  requestId     String          @unique // idempotência `${model}:${inputHash}:${operation}`
+  userId        String?
+  transactionId String?
+  operation     String
+  modelVersion  String
+  inputHash     String
+  promptHash    String
+  outputHash    String?
+  confidence    Float?
+  sourcesUsed   Json?
+  status        AiRequestStatus @default(SUGGESTED)
+  approvedById  String?
+  appliedChanges Json?
+  createdAt     DateTime        @default(now())
+
+  user          User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([requestId])
+  @@map("ai_requests")
+}
+
+model SupportTicket {
+  id          String         @id @default(cuid())
+  userId      String
+  category    String // conta | documentos | pagamento | visita | reembolso | fraude | contrato | reclamacao | tecnico
+  subject     String
+  description String
+  priority    SupportPriority @default(MEDIA)
+  status      SupportStatus   @default(NEW)
+  assigneeId  String?
+  deadlineAt  DateTime?
+  escalatedAt DateTime?
+  resolvedAt  DateTime?
+  satisfaction Int?
+  createdAt   DateTime       @default(now())
+
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, priority])
+  @@index([userId, createdAt])
+  @@map("support_tickets")
+}
+
+model Dispute {
+  id           String        @id @default(cuid())
+  ticketId     String?
+  transactionId String?
+  initiatorId  String
+  subject      String
+  description  String
+  status       DisputeStatus @default(OPEN)
+  blockDeal    Boolean       @default(true) // bloqueia o negócio enquanto aberta
+  resolvedById String?
+  decisionAt   DateTime?
+  createdAt    DateTime      @default(now())
+
+  initiator    User          @relation(fields: [initiatorId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId, status])
+  @@map("disputes")
+}
+
+model Task {
+  id          String     @id @default(cuid())
+  userId      String?
+  assigneeId  String?
+  entityType  String? // transaction | listing | ticket | refund
+  entityId    String?
+  title       String
+  description String?
+  status      TaskStatus @default(TODO)
+  dueAt       DateTime?
+  doneAt      DateTime?
+  createdAt   DateTime   @default(now())
+
+  user        User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignee    User?      @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([status, dueAt])
+  @@map("tasks")
+}

@@ -1,0 +1,21 @@
+{
+  // Verificação de tipos em ambientes de pouca RAM (a config total inclui
+  // .next/types + plugin Next, que exigem >1 GB). Programa restrito a fonte.
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["dom", "dom.iterable", "esnext", "node"],
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "allowImportingTsExtensions": true,
+    "paths": { "@/*": ["./*"] }
+  },
+  "include": ["lib/**/*.ts", "services/**/*.ts", "app/**/*.ts", "prisma/seed/**/*.ts"],
+  "exclude": ["node_modules", ".next"]
+}
