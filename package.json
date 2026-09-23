@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node server.js",
+    "dev": "next dev",
     "build": "next build",
-    "start": "set NODE_ENV=production&& node server.js",
+    "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
     "setup:production": "node scripts/setup-production.mjs"
@@ -13,6 +13,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
+    "@supabase/supabase-js": "^2.116.0",
     "bcryptjs": "^3.0.3",
     "better-auth": "^1.6.26",
     "dotenv": "^17.4.2",
@@ -22,8 +23,6 @@
     "prisma": "^7.9.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {

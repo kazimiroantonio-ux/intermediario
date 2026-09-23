@@ -4,13 +4,13 @@
 
 | Serviço | Finalidade | Wrapper/Ficheiro | Variáveis |
 |---------|-----------|-----------------|-----------|
-| **Supabase** | Base de dados PostgreSQL | `lib/prisma.ts` | `DATABASE_URL` |
+| **Supabase** | Base de dados PostgreSQL + Realtime (chat) | `lib/prisma.ts`, `lib/supabase-*.ts`, `lib/realtime.ts` | `DATABASE_URL`, `DIRECT_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` |
 | **better-auth** | Autenticação, sessões, 2FA | `lib/auth.ts`, `lib/auth-client.ts` | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` |
 | **KambaSMS** | SMS/OTP em Angola | `lib/sms/kambasms.ts` | `KAMBA_API_KEY` |
 | **Brevo** | E-mails transacionais | `services/brevo.ts` | `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME` |
 | **Multicaixa Express / ProxyPay** | Pagamentos | `services/proxypay.ts`, `app/api/pagamentos/multicaixa*/` | `MULTICAIXA_ENTITY`, `MULTICAIXA_WEBHOOK_SECRET` |
 | **Cloudinary** | Armazenamento de imagens (nuvem) | `lib/storage.ts` | `STORAGE_PROVIDER`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_UPLOAD_PRESET` |
-| **Socket.io** | Chat em tempo real | `server.js`, `lib/socket-client.ts` | `NEXT_PUBLIC_SOCKET_URL` (legado) |
+| **Supabase Realtime** | Chat em tempo real (serverless) | `lib/supabase-*.ts`, `lib/realtime.ts`, `app/mensagens/` | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` |
 | **AngoWeb** | Hospedagem (cPanel + Node.js) | — | Variáveis do painel cPanel |
 
 ---
@@ -36,7 +36,7 @@ AngoWeb suporta Node.js via **cPanel → Application Manager** (Passenger). Requ
 
 - **Node.js 18+** (verifica no painel a versão disponível).
 - **Comando de build:** `npm run build` (ou `next build`).
-- **Comando de start:** `npm run start` (que corresponde a `set NODE_ENV=production&& node server.js`).
+- **Comando de start:** `npm run start` (que corresponde a `next start`).
 - **Porta:** a aplicação deve escutar na porta indicada pelo cPanel (normalmente a variável `PORT` é atribuída automaticamente).
 - **Variáveis de ambiente:** definidas no cPanel → Application Manager → Environment Variables.
 - **Dependências:** `npm install` (o `postinstall` já corre `prisma generate`).

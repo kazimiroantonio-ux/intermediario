@@ -24,7 +24,7 @@ Write-Host "Postgres local OK (porta 5432)"
 # 3) dev server destacado com logs
 $outLog = Join-Path $root ".dev-server.out.log"
 $errLog = Join-Path $root ".dev-server.err.log"
-Start-Process -FilePath "$env:USERPROFILE\tools\node\node.exe" -ArgumentList "server.js" `
+Start-Process -FilePath "$env:USERPROFILE\tools\node\node.exe" -ArgumentList "node_modules\next\dist\bin\next","dev" `
   -WorkingDirectory $root -WindowStyle Hidden `
   -RedirectStandardOutput $outLog -RedirectStandardError $errLog
 Write-Host "Dev server a arrancar (log: $errLog)"

@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const isProd = process.env.NODE_ENV === "production";
 
+const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/^https:\/\//, "") ?? "";
+
 // CSP pragmática para Next.js sem infra de nonce:
 // scripts precisam de 'unsafe-inline' (bootstrap do Next); tudo o resto é fechado.
 const csp = [
@@ -10,7 +12,7 @@ const csp = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://images.unsplash.com https://lh3.googleusercontent.com",
   "font-src 'self' data:",
-  "connect-src 'self' ws: wss:",
+  `connect-src 'self' ws: wss: ${supabaseHost ? `https://${supabaseHost} wss://${supabaseHost}` : ""}`,
   "frame-ancestors 'none'",
   "object-src 'none'",
   "base-uri 'self'",

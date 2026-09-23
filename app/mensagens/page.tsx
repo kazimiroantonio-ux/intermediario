@@ -3,17 +3,19 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, Suspense } from "react";
-import { getSocket } from "@/lib/socket-client";
 import { authClient } from "@/lib/auth-client";
+import { supabaseBrowser } from "@/lib/supabase-browser";
+import {
+  CHANNEL_CHAT,
+  CHANNEL_CHAT_TYPING,
+  EVENT_MESSAGE_NEW,
+  EVENT_MESSAGE_READ,
+  EVENT_RECIPIENT_TYPING,
+  EVENT_UNREAD_NOTIFICATION,
+  type ChatMessagePayload,
+} from "@/lib/realtime";
 
-type Message = {
-  id: string;
-  content: string;
-  isRead: boolean;
-  senderId: string;
-  createdAt: string;
-  sender: { id: string; name: string };
-};
+type Message = ChatMessagePayload;
 
 type ChatRoom = {
   id: string;
@@ -35,8 +37,10 @@ function ChatApp() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
+  const [typing, setTyping] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
-  const cleanupRef = useRef<(() => void) | null>(null);
+  const chatChannelRef = useRef<ReturnType<typeof supabaseBrowser.channel> | null>(null);
+  const typingChannelRef = useRef<ReturnType<typeof supabaseBrowser.channel> | null>(null);
 
   const activeIdRef = useRef(activeId);
   activeIdRef.current = activeId;
@@ -51,7 +55,7 @@ function ChatApp() {
     const res = await fetch("/api/mensagens");
     if (res.ok) {
       const data = await res.json();
-      setChatRooms(data.conversations);
+      setChatRooms(data.chatRooms);
     }
   }, []);
 
@@ -64,7 +68,10 @@ function ChatApp() {
   }, []);
 
   useEffect(() => {
-    if (myId) refreshChatRooms();
+    if (myId) {
+      refreshChatRooms();
+      setLoading(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myId]);
 
@@ -75,87 +82,114 @@ function ChatApp() {
   }, [activeId, myId]);
 
   useEffect(() => {
-    let cancelled = false;
-    async function connect() {
-      if (!myId) return;
-      const socket = await getSocket();
-      if (cancelled) return;
+    if (!activeId || !myId) return;
 
-      const onNew = ({ message, chatRoomId }: { message: Message; chatRoomId: string }) => {
+    let cancelled = false;
+
+    const chatChannel = supabaseBrowser.channel(CHANNEL_CHAT(activeId));
+    chatChannelRef.current = chatChannel;
+
+    chatChannel
+      .on("broadcast", { event: EVENT_MESSAGE_NEW }, ({ payload }) => {
+        const { message, chatRoomId } = payload as { message: Message; chatRoomId: string };
+        if (chatRoomId !== activeIdRef.current) return;
         setMessages((prev) => {
           const list = prev[chatRoomId] ?? [];
           if (list.some((m) => m.id === message.id)) return prev;
           return { ...prev, [chatRoomId]: [...list, message] };
         });
         refreshChatRooms();
-      };
-      const onRead = () => {
+      })
+      .on("broadcast", { event: EVENT_MESSAGE_READ }, () => {
         refreshChatRooms();
-      };
-      const onTyping = ({ chatRoomId, userId }: { chatRoomId: string; userId: string }) => {
-        // Handle recipient typing indicator if needed
-      };
-      const onUnreadNotification = () => {
+      })
+      .on("broadcast", { event: EVENT_UNREAD_NOTIFICATION }, () => {
         refreshChatRooms();
-      };
-
-      const onReconnect = () => {
-        setConnected(true);
-        refreshChatRooms();
-        if (activeIdRef.current) {
-          loadMessages(activeIdRef.current);
-          socket.emit("message:read", { chatRoomId: activeIdRef.current });
+      })
+      .subscribe((status) => {
+        if (cancelled) return;
+        if (status === "SUBSCRIBED") {
+          setConnected(true);
         }
-      };
-      const onDisconnect = () => setConnected(false);
+      });
 
-      socket.on("message:new", onNew);
-      socket.on("messages:read", onRead);
-      socket.on("recipient_typing", onTyping);
-      socket.on("unread_notification", onUnreadNotification);
-      socket.on("connect", onReconnect);
-      socket.on("disconnect", onDisconnect);
+    const typingChannel = supabaseBrowser.channel(CHANNEL_CHAT_TYPING(activeId));
+    typingChannelRef.current = typingChannel;
 
-      setConnected(socket.connected);
+    typingChannel
+      .on("broadcast", { event: EVENT_RECIPIENT_TYPING }, ({ payload }) => {
+        const { chatRoomId, userId, isTyping } = payload as {
+          chatRoomId: string;
+          userId: string;
+          isTyping: boolean;
+        };
+        if (chatRoomId !== activeIdRef.current || userId === myId) return;
+        setTyping(isTyping);
+      })
+      .subscribe();
 
-      if (activeIdRef.current) {
-        socket.emit("message:read", { chatRoomId: activeIdRef.current });
-      }
-
-      cleanupRef.current = () => {
-        socket.off("message:new", onNew);
-        socket.off("messages:read", onRead);
-        socket.off("recipient_typing", onTyping);
-        socket.off("unread_notification", onUnreadNotification);
-        socket.off("connect", onReconnect);
-        socket.off("disconnect", onDisconnect);
-      };
-    }
-    connect();
     return () => {
       cancelled = true;
-      cleanupRef.current?.();
-      cleanupRef.current = null;
+      supabaseBrowser.removeChannel(chatChannel);
+      supabaseBrowser.removeChannel(typingChannel);
+      chatChannelRef.current = null;
+      typingChannelRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myId]);
+  }, [activeId, myId]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [messages[activeId]]);
+  }, [messages[activeId], typing]);
+
+  const sendRead = useCallback(async () => {
+    if (!activeIdRef.current) return;
+    const res = await fetch(`/api/mensagens/${activeIdRef.current}/read`, { method: "PATCH" });
+    if (res.ok) refreshChatRooms();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!activeId || !myId) return;
+    sendRead();
+    const interval = setInterval(sendRead, 15000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId, myId]);
+
+  function emitTyping(isTyping: boolean) {
+    const chatRoomId = activeIdRef.current;
+    if (!chatRoomId || !myId) return;
+    const channel = supabaseBrowser.channel(CHANNEL_CHAT_TYPING(chatRoomId));
+    channel
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          channel.send({
+            type: "broadcast",
+            event: EVENT_RECIPIENT_TYPING,
+            payload: { chatRoomId, userId: myId, isTyping },
+          });
+          channel.unsubscribe();
+        }
+      });
+  }
 
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault();
     const content = input.trim();
     if (!content || !activeId) return;
     setInput("");
-    const socket = await getSocket();
-    socket.emit("message:send", { chatRoomId: activeId, content }, (res: { error?: string } | null) => {
-      if (res?.error) {
-        setInput(content);
-        alert(res.error);
-      }
+    emitTyping(false);
+    const res = await fetch("/api/mensagens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chatRoomId: activeId, content }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setInput(content);
+      alert(data.error ?? "Erro ao enviar mensagem.");
+    }
   }
 
   if (isPending) {
@@ -243,7 +277,7 @@ function ChatApp() {
                     {connected ? (
                       <span className="font-medium text-emerald-600">● ligado</span>
                     ) : (
-                      <span className="font-medium text-amber-600">○ a reconectar…</span>
+                      <span className="font-medium text-amber-600">○ a ligar…</span>
                     )}
                   </p>
                 </div>
@@ -268,12 +302,22 @@ function ChatApp() {
                     </div>
                   );
                 })}
+                {typing && (
+                  <div className="flex justify-start">
+                    <div className="max-w-[75%] rounded-2xl bg-zinc-100 px-4 py-2 text-sm text-zinc-400">a escrever…</div>
+                  </div>
+                )}
               </div>
 
               <form onSubmit={sendMessage} className="flex gap-2 border-t border-zinc-200 p-3">
                 <input
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    if (e.target.value && !typing) emitTyping(true);
+                    if (!e.target.value) emitTyping(false);
+                  }}
+                  onBlur={() => emitTyping(false)}
                   placeholder="Escreva uma mensagem..."
                   className="flex-1 rounded-xl border border-zinc-300 px-4 py-2.5 text-sm outline-none focus:border-emerald-600"
                 />
