@@ -13,17 +13,13 @@ const IMG = {
   IMOBILIARIO: ["photo-1568605114967-8130f3a36994", "photo-1570129477492-45c003edd2be", "photo-1512917774080-9991f1c4c750", "photo-1522708323590-d24dbb6b0267", "photo-1560448204-e02f11c3d0e2", "photo-1493809842364-78817add7ffb", "photo-1484154218962-a197022b5858", "photo-1600596542815-ffad4c1539a9"],
   TERRENO: ["photo-1500382017468-9049fed747ef", "photo-1466692476868-aef1dfb1e735", "photo-1473448912268-2022ce9509d8", "photo-1501854140801-50d01698950b"],
   MAQUINAS: ["photo-1504328345606-18bbc8c9d7d1", "photo-1541888946425-d81bb19240f5", "photo-1504307651254-35680f356dfd", "photo-1581094794329-c8112a89af12"],
-  ELETRONICOS: ["photo-1511707171634-5f897ff02aa9", "photo-1510557880182-3d4d3cba35a5", "photo-1505740420928-5e560c06d30e", "photo-1546868871-7041f2a55e12"],
-  COMPUTADORES: ["photo-1517336714731-489689fd1ca8", "photo-1496181133206-80ce9b88a853", "photo-1547394765-185e1e68f34e", "photo-1587831990711-23ca6441447b"],
   MOVEIS: ["photo-1555041469-a586c61ea9bc", "photo-1586023492125-27b2c045efd7", "photo-1524758631624-e2822e304c36", "photo-1616486338812-3dadae4b4ace"],
-  MODA: ["photo-1542291026-7eec264c27ff", "photo-1549298916-b41d501d3772", "photo-1521572163474-6864f9cf17ab", "photo-1434389677669-e08b4cac3105"],
-  SERVICOS: ["photo-1556742049-0cfed4f6a45d", "photo-1581092160562-40aa08e78837", "photo-1486262715619-67b85e0b08d3"],
 };
 
 const BUSINESSES = [
   { key: "autonorte", name: "AutoNorte Concessionária", email: "autonorte@demo.co.ao", bio: "Concessionária de viaturas novas e usadas certificadas em Luanda. Garantia de 12 meses em todos os veículos.", province: "Luanda", avatar: "photo-1560250097-0b93528c311a" },
   { key: "luandasul", name: "Imobiliária Luanda Sul", email: "luandasul@demo.co.ao", bio: "Especialistas na venda e arrendamento de imóveis de luxo em Talatona, Miramar e Ilha de Luanda.", province: "Luanda", avatar: "photo-1573496359142-b8d87734a5a2" },
-  { key: "techluanda", name: "TechLuanda Store", email: "techluanda@demo.co.ao", bio: "Loja de telemóveis, computadores e eletrónica original com garantia. Envio para todo o país.", province: "Luanda", avatar: "photo-1472099645785-5658abf4ff4e" },
+  { key: "techluanda", name: "TechLuanda Store", email: "techluanda@demo.co.ao", bio: "Loja de equipamentos e acessórios originais com garantia. Envio para todo o país.", province: "Luanda", avatar: "photo-1472099645785-5658abf4ff4e" },
   { key: "agrofuturo", name: "AgroFuturo Equipamentos", email: "agrofuturo@demo.co.ao", bio: "Tractores, geradores e maquinaria agrícola e industrial com assistência técnica própria.", province: "Huambo", avatar: "photo-1507003211169-0a1dd7228f2d" },
   { key: "casaestilo", name: "Casa & Estilo Móveis", email: "casaestilo@demo.co.ao", bio: "Mobiliário moderno e decoração para a sua casa. Entrega e montagem incluídas.", province: "Benguela", avatar: "photo-1438761681033-6461ffad8d80" },
 ];
@@ -71,27 +67,12 @@ const LISTINGS = [
   { ownerKey: "agrofuturo", title: "Escavadora CAT 320D 2018", price: 145000000, category: "MAQUINAS", subcategory: "Escavadora", dealType: "VENDA", province: "Luanda", municipality: "Viana", featured: true, views: 1104, daysAgo: 6,
     description: "Escavadora Caterpillar 320D 2018 importada, motor e braço em excelente estado, 9.500 horas de trabalho. Inclui dois baldes. Documentação de importação tratada.",
     attrs: { marca: "Caterpillar", modelo: "320D", ano: "2018", estado: "Usado" }, imgIdx: [2, 3] },
-  { ownerKey: "techluanda", title: "iPhone 14 Pro Max 256 GB — selado", price: 1250000, category: "ELETRONICOS", subcategory: "Telemóveis", dealType: "VENDA", province: "Luanda", municipality: "Ingombota", views: 1876, daysAgo: 1,
-    description: "iPhone 14 Pro Max 256GB novo e selado de fábrica, versão americana. Desbloqueado para todas as operadoras. Garantia de loja de 6 meses. Entregas em Luanda e envios para províncias.",
-    attrs: { marca: "Apple", modelo: "iPhone 14 Pro Max", estado: "Novo" }, imgIdx: [0, 1] },
-  { ownerKey: "techluanda", title: "Samsung Galaxy S23 Ultra 512 GB", price: 1180000, category: "ELETRONICOS", subcategory: "Telemóveis", dealType: "VENDA", province: "Luanda", municipality: "Ingombota", views: 943, daysAgo: 4,
-    description: "Galaxy S23 Ultra 512GB com S Pen incluída. Câmera de 200 MP, bateria de 5000 mAh. Novo e selado com garantia de 12 meses Samsung. Várias cores disponíveis.",
-    attrs: { marca: "Samsung", modelo: "Galaxy S23 Ultra", estado: "Novo" }, imgIdx: [1] },
-  { ownerKey: "techluanda", title: "MacBook Air M2 2022 — 8/256 GB", price: 1680000, category: "COMPUTADORES", subcategory: "Portáteis", dealType: "VENDA", province: "Luanda", municipality: "Ingombota", views: 765, daysAgo: 3,
-    description: "MacBook Air M2 selado, chip Apple M2, 8 GB RAM unificada e SSD de 256 GB. Autonomia até 18 horas, peso apenas 1,24 kg. Ideal para estudantes e profissionais.",
-    attrs: { marca: "Apple", modelo: "MacBook Air M2", ram: "8", disco: "SSD 256 GB", estado: "Novo" }, imgIdx: [0, 1] },
-  { ownerKey: "techluanda", title: "PC Gamer Ryzen 7 + RTX 4070 12 GB", price: 2350000, category: "COMPUTADORES", subcategory: "Desktop", dealType: "VENDA", province: "Luanda", municipality: "Rangel", views: 620, daysAgo: 9,
-    description: "Computador gamer montado e testado: Ryzen 7 5800X, RTX 4070 12GB, 32GB RAM 3600MHz, SSD NVMe 1TB, fonte 750W 80+ Gold. Corre qualquer jogo em Full HD/1440p no ultra.",
-    attrs: { marca: "Custom Build", ram: "32", disco: "SSD NVMe 1 TB", estado: "Novo" }, imgIdx: [3] },
   { ownerKey: "casaestilo", title: "Sofá de canto 7 lugares em veludo", price: 780000, category: "MOVEIS", subcategory: "Salas", dealType: "VENDA", province: "Benguela", municipality: "Lobito", views: 402, daysAgo: 2,
     description: "Sofá de canto generoso em veludo premium com pés em madeira maciça. Espuma de alta densidade, muito confortável. Disponível em cinza, verde e azul. Montagem incluída no Lobito e Benguela.",
     attrs: { material: "Veludo / madeira", estado: "Novo" }, imgIdx: [0, 3] },
   { ownerKey: "casaestilo", title: "Roupeiro casal 4 portas espelhado", price: 320000, category: "MOVEIS", subcategory: "Quartos", dealType: "VENDA", province: "Benguela", municipality: "Lobito", views: 233, daysAgo: 7,
     description: "Roupeiro de casal com 4 portas corrediças, duas delas espelhadas. Interior com varões, prateleiras ajustáveis e gavetas. MDF de alta resistência. Entregamos em toda a província.",
     attrs: { material: "MDF", estado: "Novo" }, imgIdx: [1] },
-  { ownerKey: "casaestilo", title: "Ténis Nike Air Force 1 '07 (original)", price: 145000, category: "MODA", subcategory: "Calçado", dealType: "VENDA", province: "Benguela", municipality: "Benguela", views: 588, daysAgo: 2,
-    description: "Nike Air Force 1 '07 100% originais, trazidos dos EUA. Todos os tamanhos do 38 ao 45. Verificação de autenticidade permitida antes da compra.",
-    attrs: { marca: "Nike", tamanho: "38 ao 45", estado: "Novo com etiqueta" }, imgIdx: [0, 1] },
 ];
 
 async function signupWithRetry(payload, tries = 5) {

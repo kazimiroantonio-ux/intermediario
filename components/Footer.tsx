@@ -41,7 +41,7 @@ export function Footer() {
               <li><Link href="/listar?categoria=IMOBILIARIO" className="hover:text-emerald-700">Imóveis</Link></li>
               <li><Link href="/listar?categoria=TERRENO" className="hover:text-emerald-700">Terrenos</Link></li>
               <li><Link href="/listar?categoria=MOTORIZADAS" className="hover:text-emerald-700">Motorizadas</Link></li>
-              <li><Link href="/listar?categoria=ELETRONICOS" className="hover:text-emerald-700">Eletrónicos</Link></li>
+              <li><Link href="/listar?categoria=MOVEIS" className="hover:text-emerald-700">Móveis</Link></li>
               <li><Link href="/listar?categoria=OUTROS" className="hover:text-emerald-700">Outros</Link></li>
             </ul>
           </div>

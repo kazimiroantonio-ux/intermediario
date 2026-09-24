@@ -4,11 +4,7 @@ export type ListingCategory =
   | "IMOBILIARIO"
   | "TERRENO"
   | "MAQUINAS"
-  | "ELETRONICOS"
-  | "COMPUTADORES"
   | "MOVEIS"
-  | "MODA"
-  | "SERVICOS"
   | "OUTROS";
 export type DealType = "VENDA" | "ALUGUER";
 
@@ -27,11 +23,7 @@ export const CATEGORIES: CategoryInfo[] = [
   { slug: "IMOBILIARIO", title: "Imobiliário", short: "Imóveis", desc: "Casas, apartamentos e escritórios", icon: "🏠", accent: "from-emerald-500 to-teal-600" },
   { slug: "TERRENO", title: "Terrenos", short: "Terrenos", desc: "Construção, lotes e quintas", icon: "🌍", accent: "from-lime-500 to-green-600" },
   { slug: "MAQUINAS", title: "Máquinas & Equipamento", short: "Máquinas", desc: "Tratores, geradores e ferramentas", icon: "🚜", accent: "from-amber-500 to-orange-600" },
-  { slug: "ELETRONICOS", title: "Eletrónicos", short: "Eletrónicos", desc: "Telemóveis, TVs e som", icon: "📱", accent: "from-cyan-500 to-sky-600" },
-  { slug: "COMPUTADORES", title: "Computadores", short: "Computadores", desc: "Portáteis, desktops e componentes", icon: "💻", accent: "from-slate-500 to-zinc-600" },
   { slug: "MOVEIS", title: "Móveis & Decoração", short: "Móveis", desc: "Salas, quartos e cozinhas", icon: "🪑", accent: "from-rose-500 to-pink-600" },
-  { slug: "MODA", title: "Moda & Acessórios", short: "Moda", desc: "Roupas, calçado e relógios", icon: "👕", accent: "from-fuchsia-500 to-purple-600" },
-  { slug: "SERVICOS", title: "Serviços", short: "Serviços", desc: "Construção, reparações e transporte", icon: "🛠", accent: "from-teal-500 to-emerald-600" },
   { slug: "OUTROS", title: "Outros Bens", short: "Outros", desc: "Equipamento pesado, embarcações e mais", icon: "📦", accent: "from-stone-500 to-neutral-600" },
 ];
 
@@ -53,11 +45,7 @@ export const SUBCATEGORIES: Record<string, string[]> = {
   IMOBILIARIO: ["Apartamento", "Vivenda", "Moradia", "Escritório", "Loja", "Armazém", "Prédio"],
   TERRENO: ["Construção", "Agrícola", "Quinta", "Lote"],
   MAQUINAS: ["Trator", "Escavadora", "Gerador", "Compressor", "Empilhador", "Ferramentas"],
-  ELETRONICOS: ["Telemóveis", "Televisões", "Som", "Câmaras", "Jogos", "Acessórios"],
-  COMPUTADORES: ["Portáteis", "Desktop", "Monitores", "Impressoras", "Componentes"],
   MOVEIS: ["Salas", "Quartos", "Cozinhas", "Escritório", "Jardim", "Decoração"],
-  MODA: ["Roupas", "Calçado", "Acessórios", "Relógios", "Joias"],
-  SERVICOS: ["Construção", "Informática", "Limpeza", "Transporte", "Reparações", "Consultoria"],
   OUTROS: ["Equipamento pesado", "Embarcação", "Animal", "Material", "Outro"],
 };
 
@@ -107,30 +95,9 @@ export const ATTRIBUTE_FIELDS: Record<string, AttributeField[]> = {
     { key: "ano", label: "Ano", searchable: true },
     { key: "estado", label: "Estado", options: ["Novo", "Usado"], searchable: true },
   ],
-  ELETRONICOS: [
-    { key: "marca", label: "Marca", searchable: true },
-    { key: "modelo", label: "Modelo", searchable: true },
-    { key: "estado", label: "Estado", options: ["Novo", "Usado", "Recondicionado"], searchable: true },
-  ],
-  COMPUTADORES: [
-    { key: "marca", label: "Marca", searchable: true },
-    { key: "modelo", label: "Modelo", searchable: true },
-    { key: "ram", label: "RAM (GB)" },
-    { key: "disco", label: "Disco" },
-    { key: "estado", label: "Estado", options: ["Novo", "Usado", "Recondicionado"], searchable: true },
-  ],
   MOVEIS: [
     { key: "material", label: "Material", searchable: true },
     { key: "estado", label: "Estado", options: ["Novo", "Usado"], searchable: true },
-  ],
-  MODA: [
-    { key: "marca", label: "Marca", searchable: true },
-    { key: "tamanho", label: "Tamanho" },
-    { key: "estado", label: "Estado", options: ["Novo", "Usado", "Novo com etiqueta"], searchable: true },
-  ],
-  SERVICOS: [
-    { key: "tipo_servico", label: "Tipo de serviço", searchable: true },
-    { key: "preco_fixo", label: "Preço fixo", options: ["Sim", "Sob orçamento"], searchable: true },
   ],
   OUTROS: [
     { key: "estado", label: "Estado", options: ["Novo", "Usado"], searchable: true },

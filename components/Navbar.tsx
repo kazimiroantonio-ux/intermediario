@@ -11,7 +11,7 @@ const navLinks = [
   { href: "/listar?categoria=AUTOMOVEL", label: "Carros" },
   { href: "/listar?categoria=IMOBILIARIO", label: "Imóveis" },
   { href: "/listar?categoria=TERRENO", label: "Terrenos" },
-  { href: "/listar?categoria=SERVICOS", label: "Serviços" },
+  { href: "/listar?categoria=MOTORIZADAS", label: "Motorizadas" },
   { href: "/empresas", label: "Empresas" },
 ];
 
