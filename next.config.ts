@@ -4,13 +4,21 @@ const isProd = process.env.NODE_ENV === "production";
 
 const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/^https:\/\//, "") ?? "";
 
+const imageRemotePatterns = [
+  { protocol: "https" as const, hostname: "images.unsplash.com" },
+  { protocol: "https" as const, hostname: "lh3.googleusercontent.com" },
+];
+if (supabaseHost) {
+  imageRemotePatterns.push({ protocol: "https" as const, hostname: supabaseHost });
+}
+
 // CSP pragmática para Next.js sem infra de nonce:
 // scripts precisam de 'unsafe-inline' (bootstrap do Next); tudo o resto é fechado.
 const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isProd ? "" : " 'unsafe-eval'"}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://images.unsplash.com https://lh3.googleusercontent.com",
+  `img-src 'self' data: blob: https://images.unsplash.com https://lh3.googleusercontent.com${supabaseHost ? ` https://${supabaseHost}` : ""}`,
   "font-src 'self' data:",
   `connect-src 'self' ws: wss: ${supabaseHost ? `https://${supabaseHost} wss://${supabaseHost}` : ""}`,
   "frame-ancestors 'none'",
@@ -30,10 +38,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "images.unsplash.com" },
-      { protocol: "https", hostname: "lh3.googleusercontent.com" },
-    ],
+    remotePatterns: imageRemotePatterns,
   },
   experimental: {
     webpackBuildWorker: false,

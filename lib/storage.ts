@@ -1,8 +1,9 @@
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
+import { supabaseServer } from "@/lib/supabase-server";
 
-export type StorageProvider = "local" | "cloudinary" | "s3";
+export type StorageProvider = "local" | "supabase" | "cloudinary" | "s3";
 
 const provider = (process.env.STORAGE_PROVIDER ?? "local") as StorageProvider;
 
@@ -12,6 +13,19 @@ async function saveLocal(buffer: Buffer, ext: string): Promise<string> {
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, filename), buffer);
   return `/uploads/${filename}`;
+}
+
+async function saveSupabase(buffer: Buffer, ext: string, mime: string): Promise<string> {
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? "anuncios";
+  const filename = `${crypto.randomUUID()}${ext}`;
+  const { error } = await supabaseServer.storage.from(bucket).upload(filename, buffer, {
+    contentType: mime,
+    cacheControl: "3600",
+    upsert: false,
+  });
+  if (error) throw error;
+  const { data } = supabaseServer.storage.from(bucket).getPublicUrl(filename);
+  return data.publicUrl;
 }
 
 // Cloudinary via REST (upload não assinado com preset).
@@ -44,6 +58,8 @@ async function saveCloudinary(buffer: Buffer, mime: string): Promise<string> {
 export async function saveImage(buffer: Buffer, ext: string, mime: string): Promise<string> {
   try {
     switch (provider) {
+      case "supabase":
+        return await saveSupabase(buffer, ext, mime);
       case "cloudinary":
         return await saveCloudinary(buffer, mime);
       case "s3":

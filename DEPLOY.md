@@ -53,15 +53,21 @@ AngoWeb suporta Node.js via **cPanel → Application Manager** (Passenger). Requ
 
 ### 3. Supabase (Base de Dados)
 
-- Dashboard → **Project Settings** → **Database** → aba **"Direct connection"**.
-- Copia a connection string, substitui `[YOUR-PASSWORD]` pela password do utilizador `postgres`.
-- Garante `sslmode=require` no final.
-- Cola como `DATABASE_URL`.
+- Projeto em **https://supabase.com/dashboard** (projeto atual: `fmtikjxwoojdqvbymqky`, região `eu-central-1`).
+- **Conexão via pooler IPv4** (`aws-0-eu-central-1.pooler.supabase.com`) — necessário em redes/máquinas sem IPv6:
+  - Porta **6543** (transaction pooler) → `DATABASE_URL` (runtime da app).
+  - Porta **5432** (session pooler, suporta DDL) → `DIRECT_URL` (CLI Prisma: `db push`/migrations).
+- Utilizador: `postgres.<project_ref>`; password colada no fim da string. Exemplo:
+  `postgresql://postgres.fmtikjxwoojdqvbymqky:PASSWORD@aws-0-eu-central-1.pooler.supabase.com:6543/postgres`
+- **Sem `sslmode` na URL**: o TLS é forçado no `PrismaPg` (`ssl: { rejectUnauthorized: false }`).
+- `prisma.config.ts` usa `env("DIRECT_URL")` (5432) para o CLI; a runtime usa `DATABASE_URL` (6543).
+- **Storage (bucket dados):** o bucket `anuncios` (público) é criado via dashboard/SDK; a app envia imagens com `STORAGE_PROVIDER=supabase`.
 
 **Checklist Supabase:**
-- [ ] `DATABASE_URL` definida (Direct, não pooler).
-- [ ] `npm run setup:production` aplica `prisma migrate deploy` com sucesso.
-- [ ] Tabela `_prisma_migrations` criada no Supabase.
+- [ ] `DATABASE_URL` = pooler 6543, `DIRECT_URL` = pooler 5432.
+- [ ] Prisma CLI corre com `DIRECT_URL` (DDL não funciona no transaction pooler).
+- [ ] Tabelas criadas no Supabase (`prisma db push` OK).
+- [ ] Bucket público `anuncios` criado no Storage.
 
 ### 4. KambaSMS (SMS/OTP)
 
@@ -105,18 +111,17 @@ AngoWeb suporta Node.js via **cPanel → Application Manager** (Passenger). Requ
 - [ ] Domínio com SSL ativo.
 - [ ] Webhook URL registado no painel ProxyPay/EMIS.
 
-### 7. Cloudinary (Imagens) — opcional
+### 7. Armazenamento de imagens (Supabase Storage)
 
-- Se quiseres armazenar imagens na nuvem em vez de local (`public/uploads/`):
-  - Cria conta em **https://console.cloudinary.com**.
-  - Copia o **Cloud Name** do Dashboard.
-  - Vai a **Settings** → **Upload** → **Upload presets** → cria um preset **Unsigned**.
-  - Define `STORAGE_PROVIDER=cloudinary`, `CLOUDINARY_CLOUD_NAME` e `CLOUDINARY_UPLOAD_PRESET`.
+- O projeto já usa **Supabase Storage** como provedor padrão (`STORAGE_PROVIDER=supabase`).
+- Bucket **`anuncios`** (público) — criado no dashboard: **Storage → New bucket → `anuncios`, Public**.
+- Sem configuração extra: URLs devolvidos são `https://<ref>.supabase.co/storage/v1/object/public/anuncios/<uuid>.<ext>`.
+- Fallback automático para `public/uploads/` local se o Supabase falhar (`lib/storage.ts`).
 
-**Checklist Cloudinary:**
-- [ ] `STORAGE_PROVIDER=cloudinary`.
-- [ ] `CLOUDINARY_CLOUD_NAME` e `CLOUDINARY_UPLOAD_PRESET` definidos.
-- [ ] Smoke test: `npm run setup:production` mostra `[OK] Cloudinary upload test OK`.
+**Checklist Armazenamento:**
+- [ ] `STORAGE_PROVIDER=supabase` definido.
+- [ ] Bucket `anuncios` público criado.
+- [ ] Smoke test: upload via app responde URL `.../storage/v1/object/public/anuncios/...`.
 
 ### 8. Arranque final
 
